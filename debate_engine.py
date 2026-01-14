@@ -1,6 +1,9 @@
 from llm_client import call_llm
 import config
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 class DebateAgent:
     def __init__(self, model_spec, role, agent_id):
@@ -10,6 +13,8 @@ class DebateAgent:
     
     def generate_argument(self, report, factor, evidence, debate_history):
         """Generate an argument for the current debate round."""
+        
+        logger.debug(f"→ {self.agent_id} generating {self.role} argument...")
         
         system_prompt = f"""You are a {self.role.upper()} debater. Your role is to argue {self.role} the factor.
 
@@ -59,6 +64,8 @@ def run_debate(report, factor, evidence):
     Run a multi-round debate for a single factor.
     Returns the debate transcript.
     """
+    logger.info(f"⚔️  Starting debate for factor: {factor}")
+    
     # Initialize agents
     pro_agent_1 = DebateAgent(config.PRO_MODEL_1, 'pro', 'Pro-A')
     pro_agent_2 = DebateAgent(config.PRO_MODEL_2, 'pro', 'Pro-B')
@@ -66,6 +73,7 @@ def run_debate(report, factor, evidence):
     con_agent_2 = DebateAgent(config.CON_MODEL_2, 'con', 'Con-B')
     
     agents = [pro_agent_1, pro_agent_2, con_agent_1, con_agent_2]
+    logger.info(f"✓ Initialized 4 agents (2 Pro, 2 Con)")
     
     transcript = []
     transcript.append(f"DEBATE: {factor}")
@@ -75,6 +83,7 @@ def run_debate(report, factor, evidence):
     debate_history = []
     
     for round_num in range(config.DEBATE_ROUNDS):
+        logger.info(f"🎯 Round {round_num + 1}/{config.DEBATE_ROUNDS}")
         transcript.append(f"\n--- ROUND {round_num + 1} ---\n")
         
         # Each agent speaks in turn
@@ -85,9 +94,10 @@ def run_debate(report, factor, evidence):
             transcript.append(turn_text)
             debate_history.append(turn_text)
             
-            print(f"Round {round_num + 1} - {agent.agent_id}: Generated argument")
+            logger.info(f"✓ {agent.agent_id} completed argument ({len(argument)} chars)")
     
     transcript.append("\n" + "=" * 80)
     transcript.append(f"Ended: {datetime.now().isoformat()}")
     
+    logger.info(f"✓ Debate complete: {len(debate_history)} total arguments")
     return "\n".join(transcript)

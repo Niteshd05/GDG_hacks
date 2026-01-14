@@ -2,6 +2,9 @@ import re
 import json
 from llm_client import call_llm
 import config
+import logging
+
+logger = logging.getLogger(__name__)
 
 def anonymize_transcript(transcript):
     """
@@ -28,34 +31,32 @@ def peer_review(anonymized_transcript, reviewer_model):
     Have a model review the entire debate and provide scores and critique.
     Returns dict with scores and written critique.
     """
-    system_prompt = """You are a debate evaluator. Score each agent's performance across multiple dimensions.
+    system_prompt = """You are a debate evaluator. Score each agent's performance.
 
-SCORING DIMENSIONS (1-10 scale):
-- Reasoning Quality: Logical coherence and structure
-- Bias: Emotional, ideological, selective framing (lower is better)
-- Insight: Depth, originality, non-obvious points
-- Evidence Use: Accuracy, relevance, proportionality
-- Debate Skill: Rebuttal quality and adaptability
-
-Return ONLY valid JSON in this format:
+Return ONLY valid JSON with these exact fields (1-10 scale):
 {
-  "Agent-1": {"reasoning": X, "bias": X, "insight": X, "evidence": X, "debate_skill": X, "critique": "..."},
-  "Agent-2": {...},
-  "Agent-3": {...},
-  "Agent-4": {...}
+  "Agent-1": {"reasoning": 7, "bias": 6, "insight": 8, "evidence": 7, "debate_skill": 8, "critique": "Strong logic"},
+  "Agent-2": {"reasoning": 6, "bias": 7, "insight": 6, "evidence": 6, "debate_skill": 7, "critique": "Moderate"},
+  "Agent-3": {"reasoning": 7, "bias": 6, "insight": 7, "evidence": 8, "debate_skill": 6, "critique": "Good evidence"},
+  "Agent-4": {"reasoning": 6, "bias": 8, "insight": 6, "evidence": 7, "debate_skill": 7, "critique": "Some bias"}
 }"""
 
-    prompt = f"""Review this anonymized debate transcript and score each agent:
+    prompt = f"""Review this debate and score each agent (1-10):
 
-{anonymized_transcript}
+{anonymized_transcript[:2000]}
 
-Provide numerical scores (1-10) and written critique for each agent."""
+Return ONLY the JSON object, no other text. Start with {{ and end with }}."""
 
     response = call_llm(reviewer_model, prompt, system_prompt)
     
     try:
         # Try to parse JSON directly
         response_clean = response.strip()
+        
+        # Handle empty response
+        if not response_clean:
+            logger.warning(f"⚠️ Empty response from {reviewer_model}")
+            raise ValueError("Empty response")
         
         # Try to extract JSON if wrapped in markdown code blocks
         if "```json" in response_clean:
@@ -67,12 +68,25 @@ Provide numerical scores (1-10) and written critique for each agent."""
             end = response_clean.find("```", start)
             response_clean = response_clean[start:end].strip()
         
+        # Try to find JSON object in the response
+        if "{" in response_clean and "}" in response_clean:
+            start = response_clean.find("{")
+            end = response_clean.rfind("}") + 1
+            response_clean = response_clean[start:end]
+        
+        logger.debug(f"Parsed response: {response_clean[:200]}...")
         scores = json.loads(response_clean)
+        
+        # Validate structure
+        if not isinstance(scores, dict):
+            raise ValueError("Response is not a dict")
+        
+        logger.info(f"✓ Successfully parsed peer review from {reviewer_model}")
         return scores
     except Exception as e:
         # Fallback: return empty scores
-        print(f"Failed to parse peer review from {reviewer_model}: {e}")
-        print(f"Response was: {response[:200]}...")
+        logger.warning(f"⚠️ Failed to parse peer review from {reviewer_model}: {e}")
+        logger.debug(f"Raw response: {response[:300]}...")
         return {
             f"Agent-{i}": {
                 "reasoning": 5, "bias": 5, "insight": 5, 
@@ -94,11 +108,14 @@ def collect_peer_reviews(anonymized_transcript):
         config.JUDGE_MODEL
     ]
     
+    logger.info(f"📊 Collecting peer reviews from {len(all_models)} models...")
     reviews = {}
     
-    for model in all_models:
-        print(f"Collecting peer review from {model}...")
+    for idx, model in enumerate(all_models, 1):
+        logger.info(f"→ Review {idx}/{len(all_models)}: {model}")
         review = peer_review(anonymized_transcript, model)
         reviews[model] = review
+        logger.info(f"✓ Review complete from {model}")
     
+    logger.info(f"✓ All peer reviews collected")
     return reviews

@@ -1,12 +1,17 @@
 from llm_client import call_llm
 import config
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 def judge_synthesis(factor, debate_transcript, peer_reviews):
     """
     Judge analyzes the entire debate and provides final verdict.
     Returns comprehensive synthesis including verdict, reasoning, and confidence.
     """
+    logger.info(f"⚖️  Judge synthesizing verdict for: {factor}")
+    
     system_prompt = """You are the Chairman and final judge of this debate.
 
 Your responsibility is to judge the ENTIRE DEBATE, not just final turns.
@@ -26,8 +31,9 @@ Be transparent and explainable."""
     for model, reviews in peer_reviews.items():
         peer_summary += f"\n{model}:\n"
         for agent, scores in reviews.items():
-            avg_score = sum([v for k, v in scores.items() if k != 'critique']) / 5
-            peer_summary += f"  {agent}: {avg_score:.1f}/10 - {scores.get('critique', '')[:100]}\n"
+            if isinstance(scores, dict) and 'reasoning' in scores:
+                avg_score = sum([v for k, v in scores.items() if k != 'critique' and isinstance(v, (int, float))]) / 5
+                peer_summary += f"  {agent}: {avg_score:.1f}/10 - {scores.get('critique', '')[:100]}\n"
     
     prompt = f"""FACTOR: {factor}
 
@@ -36,14 +42,10 @@ FULL DEBATE TRANSCRIPT:
 
 {peer_summary}
 
-Provide your final synthesis. Include:
-- Verdict
-- Why that verdict holds
-- What failed and why
-- What could change the outcome
-- Confidence level (1-10)"""
+Provide your final synthesis."""
 
     response = call_llm(config.JUDGE_MODEL, prompt, system_prompt)
+    logger.info(f"✓ Judge verdict complete for {factor}")
     return response
 
 def generate_final_report(report_text, all_factor_results):
@@ -51,6 +53,8 @@ def generate_final_report(report_text, all_factor_results):
     Generate the final comprehensive report.
     all_factor_results: list of dicts with factor, transcript, reviews, verdict
     """
+    logger.info(f"📝 Generating final report with {len(all_factor_results)} factors")
+    
     report = []
     report.append("# PROJECT AETHER - FINAL REPORT")
     report.append("=" * 80)
@@ -62,6 +66,7 @@ def generate_final_report(report_text, all_factor_results):
     report.append("")
     
     for idx, result in enumerate(all_factor_results, 1):
+        logger.info(f"  Adding factor {idx}: {result['factor']}")
         report.append(f"## FACTOR {idx}: {result['factor']}")
         report.append("")
         report.append("### JUDGE'S VERDICT")
@@ -76,8 +81,9 @@ def generate_final_report(report_text, all_factor_results):
             for model, reviews in result['peer_reviews'].items():
                 if agent_id in reviews:
                     agent_scores = reviews[agent_id]
-                    avg = sum([v for k, v in agent_scores.items() if k != 'critique']) / 5
-                    scores.append(avg)
+                    if isinstance(agent_scores, dict):
+                        avg = sum([v for k, v in agent_scores.items() if k != 'critique' and isinstance(v, (int, float))]) / 5
+                        scores.append(avg)
             
             if scores:
                 avg_score = sum(scores) / len(scores)
@@ -96,4 +102,5 @@ def generate_final_report(report_text, all_factor_results):
     report.append("")
     report.append("=" * 80)
     
+    logger.info(f"✓ Report generated successfully")
     return "\n".join(report)

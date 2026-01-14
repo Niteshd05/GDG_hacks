@@ -4,6 +4,9 @@ from bs4 import BeautifulSoup
 import config
 import time
 import random
+import logging
+
+logger = logging.getLogger(__name__)
 
 # User agent pool for rotation
 USER_AGENTS = [
@@ -22,6 +25,7 @@ def search_web(query, max_results=None):
     if max_results is None:
         max_results = config.MAX_SEARCH_RESULTS
     
+    logger.info(f"🔍 Searching: {query}")
     results = []
     try:
         with DDGS() as ddgs:
@@ -31,13 +35,15 @@ def search_web(query, max_results=None):
                     'url': result.get('href', ''),
                     'snippet': result.get('body', '')
                 })
+        logger.info(f"✓ Found {len(results)} search results")
     except Exception as e:
-        print(f"Search error: {e}")
+        logger.error(f"❌ Search error: {e}")
     
     return results
 
 def scrape_with_requests(url, timeout):
     """Direct scraping with requests library."""
+    logger.debug(f"→ Trying direct scrape: {url}")
     headers = {
         'User-Agent': random.choice(USER_AGENTS),
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -59,11 +65,13 @@ def scrape_with_requests(url, timeout):
     if response.encoding is None:
         response.encoding = 'utf-8'
     
+    logger.info(f"✓ Direct scrape successful: {url}")
     return response.text
 
 def scrape_with_playwright(url, timeout):
     """Fallback: Use playwright for JS-rendered pages."""
     try:
+        logger.debug(f"→ Trying Playwright fallback: {url}")
         from playwright.sync_api import sync_playwright
         
         with sync_playwright() as p:
@@ -81,11 +89,12 @@ def scrape_with_playwright(url, timeout):
             
             content = page.content()
             browser.close()
+            logger.info(f"✓ Playwright scrape successful: {url}")
             return content
     except ImportError:
         return None
     except Exception as e:
-        print(f"Playwright fallback failed: {e}")
+        logger.warning(f"⚠ Playwright fallback failed for {url}: {e}")
         return None
 
 def scrape_page(url, timeout=None):
@@ -102,16 +111,14 @@ def scrape_page(url, timeout=None):
     try:
         html_content = scrape_with_requests(url, timeout)
     except Exception as e:
-        print(f"Direct scrape failed for {url}: {e}")
+        logger.debug(f"⚠ Direct scrape failed for {url}: {e}")
     
     # Strategy 2: Playwright fallback for JS-heavy or blocking sites
     if not html_content:
         try:
             html_content = scrape_with_playwright(url, timeout)
-            if html_content:
-                print(f"✓ Playwright fallback succeeded for {url}")
         except Exception as e:
-            print(f"Playwright fallback error: {e}")
+            logger.warning(f"❌ All scrape methods failed for {url}")
     
     # Parse HTML if we got any content
     if html_content:
@@ -127,9 +134,14 @@ def scrape_page(url, timeout=None):
             lines = [line.strip() for line in text.split('\n') if line.strip()]
             cleaned = '\n'.join(lines)
             
-            return cleaned if cleaned and len(cleaned) > 100 else None
+            if cleaned and len(cleaned) > 100:
+                logger.debug(f"✓ Extracted {len(cleaned)} chars from {url}")
+                return cleaned
+            else:
+                logger.debug(f"⚠ Content too short from {url}")
+                return None
         except Exception as e:
-            print(f"HTML parsing error for {url}: {e}")
+            logger.error(f"❌ HTML parsing error for {url}: {e}")
             return None
     
     return None
@@ -175,21 +187,23 @@ def collect_evidence(factor, orientation='pro'):
     else:
         query = f"{factor} risks failures criticisms problems disadvantages"
     
-    print(f"Searching: {query}")
     search_results = search_web(query)
     
     evidence_chunks = []
     pages_scraped = 0
     
-    for result in search_results:
+    for idx, result in enumerate(search_results, 1):
         if pages_scraped >= config.MAX_SCRAPED_PAGES_PER_FACTOR:
+            logger.info(f"✓ Reached max pages limit ({config.MAX_SCRAPED_PAGES_PER_FACTOR})")
             break
         
         url = result['url']
+        logger.info(f"📄 Scraping page {idx}/{len(search_results)}: {url[:60]}...")
         content = scrape_page(url)
         
         if content:
             chunks = chunk_text(content)
+            logger.info(f"✓ Extracted {len(chunks)} chunks from page")
             for chunk in chunks[:3]:  # Max 3 chunks per page
                 evidence_chunks.append({
                     'text': chunk,
@@ -199,7 +213,10 @@ def collect_evidence(factor, orientation='pro'):
                 })
             pages_scraped += 1
             time.sleep(0.5)  # Be polite
+        else:
+            logger.debug(f"⚠ No content extracted from {url}")
     
+    logger.info(f"✓ Collected {len(evidence_chunks)} evidence chunks ({orientation})")
     return evidence_chunks
 
 def collect_all_evidence(factor):

@@ -10,6 +10,7 @@ from pydantic import BaseModel
 import json
 import os
 import uuid
+import logging
 from datetime import datetime
 from typing import Optional, Dict, List
 
@@ -19,6 +20,14 @@ from evidence_collector import collect_all_evidence
 from debate_engine import run_debate
 from peer_review import anonymize_transcript, collect_peer_reviews
 from judge import judge_synthesis, generate_final_report
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Project AETHER API", version="1.0.0")
 
@@ -111,9 +120,11 @@ def run_analysis(job_id: str, report_text: str):
         
         # Generate final report
         analysis_jobs[job_id]["progress"] = "Generating final report"
+        logger.info(f"📝 Generating final report...")
         final_report = generate_final_report(report_text, all_factor_results)
         
         # Save outputs
+        logger.info(f"💾 Saving output files...")
         report_path = os.path.join(config.OUTPUT_DIR, f"final_report_{job_id}.md")
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write(final_report)
@@ -128,6 +139,8 @@ def run_analysis(job_id: str, report_text: str):
                 for i, result in enumerate(all_factor_results)
             }
             json.dump(reviews_data, f, indent=2)
+        
+        logger.info(f"✅ Analysis complete! Saved to {report_path}")
         
         # Update final status
         analysis_jobs[job_id]["status"] = "completed"
