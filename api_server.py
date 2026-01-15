@@ -28,13 +28,14 @@ logger, _ = setup_logging("aether_api")
 
 app = FastAPI(title="Project AETHER API", version="2.0.0")
 
-# Enable CORS
+# Enable CORS - configured for ngrok and cross-origin access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,  # Must be False when using wildcard origins
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # In-memory storage
@@ -219,18 +220,34 @@ def analyze_factor(doc_id: str, factor_id: int, background_tasks: BackgroundTask
         "message": f"Analysis started for factor {factor_id}"
     }
 
-@app.get("/analyze/factor/{doc_id}/{factor_id}", response_model=FactorAnalysisResponse)
+@app.get("/analyze/factor/{doc_id}/{factor_id}")
 def get_factor_analysis(doc_id: str, factor_id: int):
     """Get analysis results for a specific factor"""
+    if doc_id not in documents:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
     result_key = f"{doc_id}_factor_{factor_id}"
     
+    # If analysis hasn't been started or completed yet
     if result_key not in factor_results:
-        raise HTTPException(status_code=404, detail="Factor analysis not started or not found")
+        return {
+            "status": "pending",
+            "factor_id": factor_id,
+            "message": "Analysis not started or still in progress"
+        }
     
     result = factor_results[result_key]
     
     if result["status"] == "error":
         raise HTTPException(status_code=500, detail=result.get("error", "Analysis failed"))
+    
+    # Return processing status if still running
+    if result.get("status") != "complete":
+        return {
+            "status": "processing",
+            "factor_id": factor_id,
+            "message": "Analysis in progress"
+        }
     
     return FactorAnalysisResponse(**result)
 
@@ -344,10 +361,11 @@ def _extract_pro_con_arguments(debate_transcript: str) -> tuple:
 def _parse_verdict(verdict_text: str) -> JudgeVerdict:
     """Parse verdict into structured format"""
     lines = verdict_text.split('\n')
-    verdict = "NEUTRAL"
+    verdict = None
     reasoning = verdict_text
     confidence = 5
     
+    # Try to find structured verdict
     for line in lines:
         if 'VERDICT:' in line.upper():
             verdict = line.split(':')[-1].strip()
@@ -357,6 +375,20 @@ def _parse_verdict(verdict_text: str) -> JudgeVerdict:
                 confidence = min(10, max(1, confidence))
             except:
                 confidence = 5
+    
+    # If no structured verdict found, extract from first few lines
+    if not verdict:
+        first_lines = ' '.join(lines[:5]).lower()
+        
+        # Check for positive indicators
+        if any(word in first_lines for word in ['positive', 'achievable', 'feasible', 'recommended', 'proceed', 'viable', 'support']):
+            verdict = "POSITIVE"
+        # Check for negative indicators
+        elif any(word in first_lines for word in ['negative', 'not feasible', 'high risk', 'not recommended', 'oppose', 'reject', 'insufficient']):
+            verdict = "NEGATIVE"
+        # Last resort - use first sentence
+        else:
+            verdict = lines[0][:100] if lines else "UNABLE TO PARSE"
     
     return JudgeVerdict(
         verdict=verdict,

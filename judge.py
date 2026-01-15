@@ -14,23 +14,30 @@ def judge_synthesis(factor, debate_transcript, peer_reviews):
     
     system_prompt = """You are the Chairman and final judge of this debate.
 
-Your responsibility is to judge the ENTIRE DEBATE, not just final turns.
+🚨🚨🚨 ABSOLUTE MANDATORY RULE 🚨🚨🚨
+NO NEUTRAL VERDICTS ALLOWED - YOU MUST PICK A WINNER
 
-CRITICAL RULE: You MUST take a definitive position - either SUPPORT or OPPOSE the factor.
-NEUTRAL verdicts are FORBIDDEN. You must choose a side based on which arguments were stronger.
+You MUST declare either:
+- POSITIVE/ACHIEVABLE/FEASIBLE/RECOMMENDED (if Pro arguments were stronger)
+- NEGATIVE/NOT FEASIBLE/HIGH RISK/NOT RECOMMENDED (if Con arguments were stronger)
 
-You must provide:
-1. VERDICT: Either POSITIVE/ACHIEVABLE/FEASIBLE (if Pro won) OR NEGATIVE/NOT FEASIBLE/HIGH RISK (if Con won)
-   - DO NOT use "neutral", "mixed", "inconclusive", or "needs further analysis"
-   - Force yourself to pick the stronger side even if it's close
-2. REASONING: Why this verdict holds based on debate quality
-3. FAILURES: What arguments failed and why
-4. POTENTIAL CHANGES: What could change the outcome
+FORBIDDEN RESPONSES:
+❌ "neutral" ❌ "mixed" ❌ "balanced" ❌ "inconclusive" ❌ "both sides have merit"
+❌ "needs further analysis" ❌ "unclear" ❌ "moderate" ❌ "depends"
+
+REQUIRED FORMAT:
+1. VERDICT: Start with clear POSITIVE or NEGATIVE stance (choose the stronger side)
+2. REASONING: Explain why one side's arguments were superior
+3. FAILURES: Point out what the losing side got wrong
+4. POTENTIAL CHANGES: What could flip the outcome
 5. CONFIDENCE: Your confidence level (1-10)
 
-Judge based on argument quality, not volume. Consider peer reviews but form your own opinion.
-If both sides are equally strong, choose based on which presented more concrete evidence.
-Be transparent and explainable, but ALWAYS pick a side."""
+If arguments seem equal, break the tie by:
+- Which side had more concrete evidence?
+- Which side addressed counterarguments better?
+- Which side was more specific vs vague?
+
+YOU ARE FORCED TO CHOOSE. Being diplomatic is failure. Pick the winner NOW."""
 
     # Format peer reviews summary
     peer_summary = "PEER REVIEW SUMMARY:\n"
@@ -61,10 +68,17 @@ DEBATE TRANSCRIPT:
 
 {peer_summary}
 
-Provide your final synthesis (be concise - max 500 words).
+⚖️ YOUR TASK: Judge this debate and declare a winner (max 500 words).
 
-REMEMBER: You MUST choose either a POSITIVE verdict (Pro side won) or NEGATIVE verdict (Con side won).
-No neutral positions allowed. Pick the stronger side now."""
+🚨 CRITICAL INSTRUCTION 🚨
+You CANNOT give a neutral verdict. You MUST choose:
+- POSITIVE (if Pro side won)
+- NEGATIVE (if Con side won)
+
+Even if it's close, pick the stronger side based on evidence quality.
+NEUTRAL/MIXED/BALANCED responses are FORBIDDEN.
+
+Make your decisive judgment NOW:"""
 
     try:
         response = call_llm(config.JUDGE_MODEL, prompt, system_prompt)

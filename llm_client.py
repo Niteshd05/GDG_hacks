@@ -114,7 +114,7 @@ def call_llm(model_spec, prompt, system_prompt=None):
 
                 # -------- Routing --------
                 LOCAL_MODELS = {
-                    "qwen2.5:7b",
+                    "qwen2.5:latest",
                 }
 
                 is_local = model_name.lower() in LOCAL_MODELS
