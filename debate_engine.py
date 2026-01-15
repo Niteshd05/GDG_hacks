@@ -2,8 +2,13 @@ from llm_client import call_llm
 import config
 from datetime import datetime
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 logger = logging.getLogger(__name__)
+
+# Thread-safe lock for transcript writing
+transcript_lock = threading.Lock()
 
 class DebateAgent:
     def __init__(self, model_spec, role, agent_id):
@@ -86,15 +91,32 @@ def run_debate(report, factor, evidence):
         logger.info(f"🎯 Round {round_num + 1}/{config.DEBATE_ROUNDS}")
         transcript.append(f"\n--- ROUND {round_num + 1} ---\n")
         
-        # Each agent speaks in turn
-        for agent in agents:
-            argument = agent.generate_argument(report, factor, evidence, debate_history)
+        # Generate arguments in parallel for this round
+        round_results = []
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            future_to_agent = {
+                executor.submit(agent.generate_argument, report, factor, evidence, debate_history): agent
+                for agent in agents
+            }
             
+            for future in as_completed(future_to_agent):
+                agent = future_to_agent[future]
+                try:
+                    argument = future.result()
+                    round_results.append((agent, argument))
+                    logger.info(f"✓ {agent.agent_id} completed argument ({len(argument)} chars)")
+                except Exception as e:
+                    logger.error(f"❌ {agent.agent_id} failed: {e}")
+                    round_results.append((agent, f"ERROR: {str(e)}"))
+        
+        # Sort results by agent order (Pro-A, Pro-B, Con-A, Con-B) and add to transcript
+        agent_order = {agent.agent_id: idx for idx, agent in enumerate(agents)}
+        round_results.sort(key=lambda x: agent_order[x[0].agent_id])
+        
+        for agent, argument in round_results:
             turn_text = f"[{agent.agent_id}] ({agent.role.upper()}):\n{argument}\n"
             transcript.append(turn_text)
             debate_history.append(turn_text)
-            
-            logger.info(f"✓ {agent.agent_id} completed argument ({len(argument)} chars)")
     
     transcript.append("\n" + "=" * 80)
     transcript.append(f"Ended: {datetime.now().isoformat()}")

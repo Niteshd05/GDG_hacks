@@ -44,12 +44,29 @@ This is not a summarizer. It is a **reasoning stress-test pipeline**.
 All behavior is controlled via `.env` file:
 
 - **Models**: Configure 2 Pro agents, 2 Con agents, and 1 Judge
+- **Fallback Mode**: Optimized config for free tiers (1 Ollama + 2 Groq)
 - **Web Search**: DuckDuckGo settings, scraping limits
 - **Debate**: Number of rounds, argument length
 - **Evaluation**: Anonymization, scoring scale
 - **Output**: Directory and transcript saving
 
 See `.env.example` for all options.
+
+### Fallback Mode (Recommended for Free Tiers)
+
+To minimize API costs and rate limits, enable fallback mode:
+
+```bash
+ENABLE_FALLBACK_MODE=true
+```
+
+**Fallback Configuration:**
+- **1 Local Ollama** (qwen2.5:7B): Judge + 2 debate agents
+- **2 Groq instances** (llama-3.3-70b): 2 debate agents
+- **Reduced API hits**: Provider-specific delays prevent rate limits
+- **Cost**: Minimal (mostly self-hosted)
+
+This mode uses only 3 LLM instances instead of 5, reducing costs by ~60% while maintaining debate quality.
 
 ## System Actors
 

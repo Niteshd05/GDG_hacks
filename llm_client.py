@@ -9,6 +9,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def get_provider_delay(provider):
+    """Get the configured delay for a specific provider."""
+    delays = {
+        "groq": config.GROQ_DELAY_SECONDS,
+        "ollama": config.OLLAMA_DELAY_SECONDS,
+        "openai": config.OPENAI_DELAY_SECONDS,
+        "anthropic": config.ANTHROPIC_DELAY_SECONDS,
+    }
+    return delays.get(provider.lower(), config.REQUEST_DELAY_SECONDS)
+
 def call_llm(model_spec, prompt, system_prompt=None):
     """
     Call an LLM with the given prompt.
@@ -16,12 +26,17 @@ def call_llm(model_spec, prompt, system_prompt=None):
     Supported providers: openai, anthropic, groq, ollama
     """
     provider, model_name = model_spec.split("/", 1)
+    logger.info(f"🤖 Calling {provider}/{model_name} (prompt length: {len(prompt)} chars)")
+    
+    # Apply provider-specific delay before making request
+    delay = get_provider_delay(provider)
+    if delay > 0:
+        logger.debug(f"⏱️  Applying {delay}s delay for {provider}")
+        time.sleep(delay)
     
     for attempt in range(config.MAX_RETRIES):
         try:
-            # Add delay between requests to avoid rate limiting
-            if attempt == 0:
-                time.sleep(config.REQUEST_DELAY_SECONDS)
+            # Note: Delay is applied before the retry loop, not here
             
             if provider == "openai":
                 # Use OpenRouter by default, fall back to OpenAI if no OpenRouter key
@@ -81,6 +96,7 @@ def call_llm(model_spec, prompt, system_prompt=None):
                     ollama_url = config.OLLAMA_LOCAL_URL
                 else:
                     ollama_url = config.OLLAMA_REMOTE_URL
+                logger.info(f"→ Using Ollama endpoint: {ollama_url}")
                 
                 # Use native /api/generate endpoint
                 full_prompt = ""
@@ -97,13 +113,24 @@ def call_llm(model_spec, prompt, system_prompt=None):
                         "stream": False,
                         "temperature": 0.7
                     },
-                    timeout=120
+                    timeout=180  # Increased timeout for judge synthesis
                 )
-                response.raise_for_status()
+                
+                if response.status_code != 200:
+                    logger.error(f"❌ Ollama returned status {response.status_code}: {response.text}")
+                    response.raise_for_status()
                 
                 result = response.json()
-                return result.get("response", "")
-                return response.json()["response"]
+                
+                # Check if response contains error
+                if "error" in result:
+                    raise Exception(f"Ollama error: {result['error']}")
+                
+                response_text = result.get("response", "")
+                if not response_text:
+                    raise Exception("Ollama returned empty response")
+                    
+                return response_text
             
             elif provider == "gemini":
                 client = genai.Client(api_key=config.GEMINI_API_KEY)
@@ -129,15 +156,17 @@ def call_llm(model_spec, prompt, system_prompt=None):
                 raise ValueError(f"Unknown provider: {provider}")
                 
         except Exception as e:
-            # Check for rate limiting errors
-            if "429" in str(e) or "rate" in str(e).lower():
+            error_str = str(e)
+            logger.error(f"❌ LLM call error for {provider}/{model_name}: {error_str}")
+            
+            # Check for rate limiting errors (429 status code)
+            if "429" in error_str and "rate" in error_str.lower():
                 wait_time = (config.RETRY_BACKOFF_FACTOR ** attempt) * 2  # Exponential backoff
-                logger.warning(f"⚠️ Rate limit hit for {provider}. Retrying in {wait_time}s... (attempt {attempt + 1}/{config.MAX_RETRIES})")
+                logger.warning(f"⚠️ Rate limit detected. Retrying in {wait_time}s... (attempt {attempt + 1}/{config.MAX_RETRIES})")
                 time.sleep(wait_time)
                 if attempt == config.MAX_RETRIES - 1:
                     logger.error(f"❌ Max retries exceeded for {provider}")
                     raise
             else:
                 # For non-rate-limit errors, raise immediately
-                logger.error(f"❌ LLM call failed for {provider}: {e}")
                 raise

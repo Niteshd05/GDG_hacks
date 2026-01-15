@@ -44,9 +44,14 @@ FULL DEBATE TRANSCRIPT:
 
 Provide your final synthesis."""
 
-    response = call_llm(config.JUDGE_MODEL, prompt, system_prompt)
-    logger.info(f"✓ Judge verdict complete for {factor}")
-    return response
+    try:
+        response = call_llm(config.JUDGE_MODEL, prompt, system_prompt)
+        logger.info(f"✓ Judge verdict complete for {factor}")
+        return response
+    except Exception as e:
+        logger.error(f"❌ Judge synthesis failed for {factor}: {e}")
+        # Return a fallback verdict instead of crashing
+        return f"ERROR: Judge synthesis failed due to: {str(e)}. Unable to provide verdict for this factor."
 
 def generate_final_report(report_text, all_factor_results):
     """

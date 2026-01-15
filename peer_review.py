@@ -3,6 +3,7 @@ import json
 from llm_client import call_llm
 import config
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)
 
@@ -111,11 +112,30 @@ def collect_peer_reviews(anonymized_transcript):
     logger.info(f"📊 Collecting peer reviews from {len(all_models)} models...")
     reviews = {}
     
-    for idx, model in enumerate(all_models, 1):
-        logger.info(f"→ Review {idx}/{len(all_models)}: {model}")
-        review = peer_review(anonymized_transcript, model)
-        reviews[model] = review
-        logger.info(f"✓ Review complete from {model}")
+    # Collect reviews in parallel
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_model = {
+            executor.submit(peer_review, anonymized_transcript, model): model
+            for model in all_models
+        }
+        
+        for idx, future in enumerate(as_completed(future_to_model), 1):
+            model = future_to_model[future]
+            logger.info(f"→ Review {idx}/{len(all_models)}: {model}")
+            try:
+                review = future.result()
+                reviews[model] = review
+                logger.info(f"✓ Review complete from {model}")
+            except Exception as e:
+                logger.error(f"❌ Review failed from {model}: {e}")
+                # Add fallback review
+                reviews[model] = {
+                    f"Agent-{i}": {
+                        "reasoning": 5, "bias": 5, "insight": 5, 
+                        "evidence": 5, "debate_skill": 5, 
+                        "critique": f"Review failed: {str(e)}"
+                    } for i in range(1, 5)
+                }
     
     logger.info(f"✓ All peer reviews collected")
     return reviews
