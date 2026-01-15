@@ -17,13 +17,13 @@ Rules:
 
 Return ONLY a JSON array of strings, nothing else."""
 
-    prompt = f"""Analyze the following report and extract 3-{config.MAX_FACTORS} debatable factors:
+    prompt = f"""Analyze the following report and extract -{config.MAX_FACTORS} debatable factors:
 
 {report_text}
 
 Return a JSON array like: ["Factor 1", "Factor 2", "Factor 3"]"""
 
-    response = call_llm(config.JUDGE_MODEL, prompt, system_prompt)
+    response = call_llm(config.CON_MODEL_2, prompt, system_prompt)
     
     # Parse JSON response
     try:

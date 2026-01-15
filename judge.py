@@ -16,15 +16,21 @@ def judge_synthesis(factor, debate_transcript, peer_reviews):
 
 Your responsibility is to judge the ENTIRE DEBATE, not just final turns.
 
+CRITICAL RULE: You MUST take a definitive position - either SUPPORT or OPPOSE the factor.
+NEUTRAL verdicts are FORBIDDEN. You must choose a side based on which arguments were stronger.
+
 You must provide:
-1. VERDICT: Your final position on this factor
+1. VERDICT: Either POSITIVE/ACHIEVABLE/FEASIBLE (if Pro won) OR NEGATIVE/NOT FEASIBLE/HIGH RISK (if Con won)
+   - DO NOT use "neutral", "mixed", "inconclusive", or "needs further analysis"
+   - Force yourself to pick the stronger side even if it's close
 2. REASONING: Why this verdict holds based on debate quality
 3. FAILURES: What arguments failed and why
 4. POTENTIAL CHANGES: What could change the outcome
 5. CONFIDENCE: Your confidence level (1-10)
 
 Judge based on argument quality, not volume. Consider peer reviews but form your own opinion.
-Be transparent and explainable."""
+If both sides are equally strong, choose based on which presented more concrete evidence.
+Be transparent and explainable, but ALWAYS pick a side."""
 
     # Format peer reviews summary
     peer_summary = "PEER REVIEW SUMMARY:\n"
@@ -35,14 +41,30 @@ Be transparent and explainable."""
                 avg_score = sum([v for k, v in scores.items() if k != 'critique' and isinstance(v, (int, float))]) / 5
                 peer_summary += f"  {agent}: {avg_score:.1f}/10 - {scores.get('critique', '')[:100]}\n"
     
+    # Truncate transcript if too long to avoid overwhelming the model
+    max_transcript_length = 8000  # Characters
+    truncated_transcript = debate_transcript
+    if len(debate_transcript) > max_transcript_length:
+        logger.warning(f"⚠️ Truncating debate transcript from {len(debate_transcript)} to {max_transcript_length} chars")
+        # Take beginning and end to preserve context
+        half = max_transcript_length // 2
+        truncated_transcript = (
+            debate_transcript[:half] + 
+            f"\n\n... [Middle section truncated ({len(debate_transcript) - max_transcript_length} chars)] ...\n\n" +
+            debate_transcript[-half:]
+        )
+    
     prompt = f"""FACTOR: {factor}
 
-FULL DEBATE TRANSCRIPT:
-{debate_transcript}
+DEBATE TRANSCRIPT:
+{truncated_transcript}
 
 {peer_summary}
 
-Provide your final synthesis."""
+Provide your final synthesis (be concise - max 500 words).
+
+REMEMBER: You MUST choose either a POSITIVE verdict (Pro side won) or NEGATIVE verdict (Con side won).
+No neutral positions allowed. Pick the stronger side now."""
 
     try:
         response = call_llm(config.JUDGE_MODEL, prompt, system_prompt)

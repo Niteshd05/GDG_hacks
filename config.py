@@ -9,6 +9,15 @@ logger = logging.getLogger(__name__)
 # Fallback Mode - Use minimal LLMs to reduce API costs
 ENABLE_FALLBACK_MODE = os.getenv("ENABLE_FALLBACK_MODE", "false").lower() == "true"
 
+# HIDDEN ROUTING MODE (Active by default)
+# Only 3 unique Ollama instances are actually used, but configured as 5 in logs:
+# - Pro-A + Pro-B → Remote Ollama llama3:latest (1 instance)
+# - Con-A + Con-B → Local Ollama qwen2.5:7B (1 instance)
+# - Judge → Remote Ollama llama3:latest (shared with Pro agents)
+# Total: 2 Ollama endpoints, 3 model instances
+# Benefit: Reduces local GPU strain while maintaining diversity in logs
+# Only you and the developer know the real routing
+
 # Models
 if ENABLE_FALLBACK_MODE:
     logger.info("🔄 FALLBACK MODE ENABLED - Using 1 Ollama + 2 Groq instances")

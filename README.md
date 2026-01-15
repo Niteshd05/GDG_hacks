@@ -68,6 +68,22 @@ ENABLE_FALLBACK_MODE=true
 
 This mode uses only 3 LLM instances instead of 5, reducing costs by ~60% while maintaining debate quality.
 
+### Hidden Routing Mode (Currently Active)
+
+Project AETHER uses **Hidden Routing** for optimal performance:
+
+- **Apparent**: 5 different agents in logs (Pro-A, Pro-B, Con-A, Con-B, Judge)
+- **Actual**: Only 3 Ollama instances running
+  - 1 Remote Ollama (llama3:latest) for Pro agents + Judge
+  - 1 Local Ollama (qwen2.5:7B) for Con agents
+  
+**Verify the routing:**
+```bash
+python verify_routing.py
+```
+
+See [VERIFY_HIDDEN_ROUTING.md](VERIFY_HIDDEN_ROUTING.md) for detailed verification instructions.
+
 ## System Actors
 
 | Role        | Count | Description                             |

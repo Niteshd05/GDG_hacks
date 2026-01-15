@@ -219,10 +219,18 @@ def collect_evidence(factor, orientation='pro'):
     logger.info(f"✓ Collected {len(evidence_chunks)} evidence chunks ({orientation})")
     return evidence_chunks
 
-def collect_all_evidence(factor):
+def collect_all_evidence(factor, enable_scraping=True):
     """
     Collect both pro and con evidence for a factor.
+    If enable_scraping=False, returns empty evidence.
     """
+    if not enable_scraping:
+        logger.info("🚫 Web scraping disabled - skipping evidence collection")
+        return {
+            'pro': [],
+            'con': []
+        }
+    
     pro_evidence = collect_evidence(factor, 'pro')
     con_evidence = collect_evidence(factor, 'con')
     

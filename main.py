@@ -11,19 +11,15 @@ import logging
 from datetime import datetime
 
 import config
+from clean_logging import setup_logging
 from factor_extraction import extract_factors
 from evidence_collector import collect_all_evidence
 from debate_engine import run_debate
 from peer_review import anonymize_transcript, collect_peer_reviews
 from judge import judge_synthesis, generate_final_report
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    datefmt='%H:%M:%S'
-)
-logger = logging.getLogger(__name__)
+# Setup clean logging (logs to file, minimal terminal output)
+logger, log_file = setup_logging("aether_analysis")
 
 def ensure_output_dir():
     """Create output directory if it doesn't exist."""
